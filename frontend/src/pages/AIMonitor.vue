@@ -173,7 +173,9 @@
 
     <el-dialog v-model="accountDialog" :title="editingAccount ? '编辑厂商账号' : '新增厂商账号'" width="560px">
       <el-form :model="accountForm" label-width="110px">
-        <el-form-item label="厂商"><el-segmented v-model="accountForm.provider" :options="providerOptions" :disabled="!!editingAccount" /></el-form-item>
+        <el-form-item label="厂商"><el-select v-model="accountForm.provider" :disabled="!!editingAccount" placeholder="选择厂商">
+          <el-option v-for="opt in providerOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
+        </el-select></el-form-item>
         <el-form-item label="账号名称"><el-input v-model="accountForm.name" /></el-form-item>
         <el-form-item label="官网用户名"><el-input v-model="accountForm.portal_username" placeholder="编辑时留空表示不更新" /></el-form-item>
         <el-form-item label="官网密码"><el-input v-model="accountForm.portal_password" type="password" show-password placeholder="编辑时留空表示不更新" /></el-form-item>
