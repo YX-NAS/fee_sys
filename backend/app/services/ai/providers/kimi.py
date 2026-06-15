@@ -29,8 +29,8 @@ class KimiAdapter(ProviderAdapter):
             payload = response.json()
         data = (payload.get("data") or {})
         return {
-            "available_balance": Decimal(str(data.get("total_balance", "0"))),
-            "credit_granted": Decimal(str(data.get("granted_balance", "0"))),
+            "available_balance": Decimal(str(data.get("available_balance") or data.get("cash_balance") or data.get("total_balance") or 0)),
+            "credit_granted": Decimal(str(0)),
             "credit_used": None,
             "currency": "CNY",
         }
