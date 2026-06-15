@@ -4,6 +4,7 @@ Revision ID: 004
 Revises: 003
 Create Date: 2026-06-15
 """
+import uuid as _uuid
 from datetime import date, datetime, timezone
 
 from alembic import op
@@ -16,9 +17,41 @@ branch_labels = None
 depends_on = None
 
 
+def _make_rows():
+    now = datetime.now(timezone.utc)
+    models = [
+        ("kimi", "kimi-moonshot-v1-auto", 4, 12, 1, 0),
+        ("kimi", "kimi-k2-0905-preview", 4, 12, 1, 0),
+        ("kimi", "kimi-k2-thinking", 4, 12, 1, 16),
+        ("alibaba", "qwen3-235b-a22b", 8, 20, 1, 0),
+        ("alibaba", "qwen-plus", 2, 6, 1, 0),
+        ("alibaba", "qwen-turbo", 1, 2, 1, 0),
+        ("alibaba", "qwen-max", 20, 60, 1, 0),
+        ("huawei", "pangu-nlp-large", 4, 12, 1, 0),
+        ("huawei", "pangu-nlp-chat", 4, 12, 1, 0),
+    ]
+    rows = []
+    for provider, model, inp, out, cache, reasoning in models:
+        rows.append({
+            "id": _uuid.uuid4(),
+            "provider": provider,
+            "model": model,
+            "input_price": inp / 1000.0,
+            "output_price": out / 1000.0,
+            "cached_input_price": cache / 1000.0,
+            "reasoning_price": reasoning / 1000.0,
+            "unit_tokens": 1_000_000,
+            "currency": "CNY",
+            "effective_from": date(2026, 6, 15),
+            "effective_to": None,
+            "created_by_id": None,
+            "created_at": now,
+        })
+    return rows
+
+
 def upgrade() -> None:
     bind = op.get_bind()
-    # Add new enum values by creating a new enum and swapping
     provider_enum = postgresql.ENUM(
         "deepseek", "volcengine", "kimi", "alibaba", "huawei",
         name="aiprovider", create_type=False,
@@ -33,7 +66,6 @@ def upgrade() -> None:
         """)
     op.execute("DROP TYPE aiprovider_old")
 
-    now = datetime.now(timezone.utc)
     prices_table = sa.table(
         "ai_model_prices",
         sa.column("id", postgresql.UUID(as_uuid=True)),
@@ -50,50 +82,7 @@ def upgrade() -> None:
         sa.column("created_by_id", postgresql.UUID(as_uuid=True)),
         sa.column("created_at", sa.DateTime(timezone=True)),
     )
-    # Kimi models
-    kimi_models = [
-        ("kimi-moonshot-v1-auto", 0.004, 0.012, 0.001, 0),
-        ("kimi-k2-0905-preview", 0.004, 0.012, 0.001, 0),
-        ("kimi-k2-thinking", 0.004, 0.012, 0.001, 0.016),
-    ]
-    # Alibaba models
-    alibaba_models = [
-        ("qwen3-235b-a22b", 0.008, 0.02, 0.001, 0),
-        ("qwen-plus", 0.002, 0.006, 0.001, 0),
-        ("qwen-turbo", 0.001, 0.002, 0.001, 0),
-        ("qwen-max", 0.02, 0.06, 0.001, 0),
-    ]
-    # Huawei models (盘古)
-    huawei_models = [
-        ("pangu-nlp-large", 0.004, 0.012, 0.001, 0),
-        ("pangu-nlp-chat", 0.004, 0.012, 0.001, 0),
-    ]
-    rows = []
-    for model, inp, out, cache, reasoning in kimi_models:
-        rows.append(dict(
-            id=None, provider="kimi", model=model,
-            input_price=inp, output_price=out, cached_input_price=cache,
-            reasoning_price=reasoning, unit_tokens=1_000_000, currency="CNY",
-            effective_from=date(2026, 6, 15), effective_to=None,
-            created_by_id=None, created_at=now,
-        ))
-    for model, inp, out, cache, reasoning in alibaba_models:
-        rows.append(dict(
-            id=None, provider="alibaba", model=model,
-            input_price=inp, output_price=out, cached_input_price=cache,
-            reasoning_price=reasoning, unit_tokens=1_000_000, currency="CNY",
-            effective_from=date(2026, 6, 15), effective_to=None,
-            created_by_id=None, created_at=now,
-        ))
-    for model, inp, out, cache, reasoning in huawei_models:
-        rows.append(dict(
-            id=None, provider="huawei", model=model,
-            input_price=inp, output_price=out, cached_input_price=cache,
-            reasoning_price=reasoning, unit_tokens=1_000_000, currency="CNY",
-            effective_from=date(2026, 6, 15), effective_to=None,
-            created_by_id=None, created_at=now,
-        ))
-    op.bulk_insert(prices_table, rows)
+    op.bulk_insert(prices_table, _make_rows())
 
 
 def downgrade() -> None:
