@@ -197,7 +197,7 @@
       <el-divider content-position="left">新增凭据</el-divider>
       <el-form :model="apiCredentialForm" label-width="110px">
         <el-form-item label="凭据名称"><el-input v-model="apiCredentialForm.name" /></el-form-item>
-        <template v-if="credentialAccount?.provider === 'deepseek'">
+        <template v-if="isApiKeyProvider(credentialAccount?.provider)">
           <el-form-item label="API Key"><el-input v-model="apiCredentialForm.api_key" type="password" show-password /></el-form-item>
         </template>
         <template v-else>
@@ -286,7 +286,7 @@ const keyForm = ref({ name: '', rate_limit_per_minute: 60, expires_at: null as s
 const priceDialog = ref(false)
 const priceForm = ref<any>({})
 const providerOptions = [{ label: 'DeepSeek', value: 'deepseek' }, { label: '火山引擎', value: 'volcengine' }, { label: 'Kimi', value: 'kimi' }, { label: '阿里云', value: 'alibaba' }, { label: '华为云', value: 'huawei' }]
-const deepseekAccounts = computed(() => accounts.value.filter(a => a.provider === 'deepseek'))
+const deepseekAccounts = computed(() => accounts.value.filter(a => a.provider === 'deepseek' || a.provider === 'kimi'))
 const summaryCards = computed(() => [
   { label: '今日费用', value: `¥${overview.value?.today_cost || '0'}` },
   { label: '昨日费用', value: `¥${overview.value?.yesterday_cost || '0'}` },
@@ -295,6 +295,7 @@ const summaryCards = computed(() => [
   { label: '异常账号', value: String(overview.value?.abnormal_account_count || 0) },
 ])
 
+function isApiKeyProvider(p?: string) { return p === "deepseek" || p === "kimi" }
 function providerName(provider: AIProvider) {
   const map: Record<string, string> = { deepseek: "DeepSeek", volcengine: "火山引擎", kimi: "Kimi", alibaba: "阿里云", huawei: "华为云" }
   return map[provider] || provider }
@@ -372,13 +373,13 @@ async function createApiCredential() {
   const account = credentialAccount.value
   if (!account) return
   const form = apiCredentialForm.value
-  const credentials = account.provider === 'deepseek'
+  const credentials = isApiKeyProvider(account.provider)
     ? { api_key: form.api_key }
     : { access_key_id: form.access_key_id, secret_access_key: form.secret_access_key, region: form.region }
   if (!form.name || Object.values(credentials).some(value => !value)) return ElMessage.warning('请完整填写 API 凭据')
   await aiApi.createApiCredential(account.id, {
     name: form.name,
-    credential_type: account.provider === 'deepseek' ? 'api_key' : 'ak_sk',
+    credential_type: isApiKeyProvider(account.provider) ? 'api_key' : 'ak_sk',
     credentials,
     is_default: form.is_default,
   })
