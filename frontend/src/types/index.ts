@@ -141,3 +141,93 @@ export interface PagedResponse<T> {
   page_size: number
   items: T[]
 }
+
+export type AIProvider = 'deepseek' | 'volcengine'
+
+export interface AIAccount {
+  id: string
+  provider: AIProvider
+  name: string
+  currency: string
+  timezone: string
+  provider_account_ref: string | null
+  base_url: string | null
+  status: 'active' | 'inactive' | 'error'
+  portal_credentials_configured: boolean
+  api_credentials_configured: boolean
+  api_credentials_count: number
+  last_sync_at: string | null
+  last_sync_status: 'never' | 'running' | 'success' | 'failed'
+  last_sync_error: string | null
+  consecutive_failures: number
+  created_at: string
+  updated_at: string
+}
+
+export interface AIProviderAPICredential {
+  id: string
+  provider_account_id: string
+  name: string
+  credential_type: 'api_key' | 'ak_sk'
+  key_hint: string | null
+  is_active: boolean
+  is_default: boolean
+  last_tested_at: string | null
+  last_test_status: 'success' | 'failed' | null
+  last_test_error: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface AIOverview {
+  today_cost: string
+  yesterday_cost: string
+  month_cost: string
+  account_count: number
+  abnormal_account_count: number
+  balances: Array<{ account_id: string; balance: string; currency: string }>
+}
+
+export interface AIDailyUsage {
+  id: string
+  account_id: string
+  date: string
+  model: string
+  input_tokens: number
+  output_tokens: number
+  cached_input_tokens: number
+  reasoning_tokens: number
+  request_count: number
+  actual_cost: string | null
+  calculated_cost: string
+  cost_source: 'provider' | 'calculated'
+  currency: string
+}
+
+export interface AIGatewayKey {
+  id: string
+  provider_account_id: string
+  name: string
+  key_prefix: string
+  status: 'active' | 'disabled'
+  rate_limit_per_minute: number
+  expires_at: string | null
+  last_used_at: string | null
+  created_at: string
+  key?: string
+}
+
+export interface AIPrice {
+  id: string
+  provider: AIProvider
+  model: string
+  input_price: string
+  output_price: string
+  cached_input_price: string
+  reasoning_price: string
+  unit_tokens: number
+  currency: string
+  effective_from: string
+  effective_to: string | null
+  created_at: string
+}

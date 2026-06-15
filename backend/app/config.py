@@ -30,6 +30,12 @@ class Settings(BaseSettings):
     APP_VERSION: str = "1.0.0"
     DEBUG: bool = False
 
+    # AI cost monitoring
+    AI_MONITOR_ADMIN_ONLY: bool = True
+    AI_GATEWAY_DEFAULT_RATE_LIMIT: int = 60
+    DEEPSEEK_BASE_URL: str = "https://api.deepseek.com"
+    AI_PROVIDER_TIMEOUT_SECONDS: int = 120
+
 
 @lru_cache
 def get_settings() -> Settings:

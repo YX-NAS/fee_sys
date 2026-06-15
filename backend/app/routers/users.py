@@ -1,6 +1,7 @@
 import uuid
+from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 
 from app.dependencies import CurrentUser, DB, require_roles
@@ -15,7 +16,7 @@ router = APIRouter(prefix="/api/users", tags=["用户管理"])
 async def list_users(
     db: DB,
     current_user: CurrentUser,
-    _=require_roles("admin"),
+    _admin: Annotated[object, Depends(require_roles("admin"))],
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
 ):
@@ -28,7 +29,12 @@ async def list_users(
 
 
 @router.post("", response_model=UserOut)
-async def create_user(body: UserCreate, db: DB, current_user: CurrentUser, _=require_roles("admin")):
+async def create_user(
+    body: UserCreate,
+    db: DB,
+    current_user: CurrentUser,
+    _admin: Annotated[object, Depends(require_roles("admin"))],
+):
     exists = await db.execute(
         select(User).where((User.username == body.username) | (User.email == str(body.email)))
     )
@@ -47,7 +53,11 @@ async def create_user(body: UserCreate, db: DB, current_user: CurrentUser, _=req
 
 @router.put("/{user_id}", response_model=UserOut)
 async def update_user(
-    user_id: uuid.UUID, body: UserUpdate, db: DB, current_user: CurrentUser, _=require_roles("admin")
+    user_id: uuid.UUID,
+    body: UserUpdate,
+    db: DB,
+    current_user: CurrentUser,
+    _admin: Annotated[object, Depends(require_roles("admin"))],
 ):
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()

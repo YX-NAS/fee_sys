@@ -18,6 +18,7 @@
 | 费用分析 | 趋势图、分类饼图、环比/同比对比、预算偏差 |
 | 预算管理 | 按账号/月份设定预算，自动计算实际偏差 |
 | 用户管理 | 管理员 / 运营 / 只读三级权限，JWT 认证 |
+| AI 费用监控 | 厂商官网登录信息、独立 API 凭据、Token、费用、余额、网关 Key、告警和同步记录 |
 
 ---
 
@@ -125,6 +126,13 @@ curl -fsSL https://raw.githubusercontent.com/YX-NAS/fee_sys/main/deploy.sh | sud
 | `ENCRYPTION_KEY` | Webhook URL 加密密钥（Fernet） | `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"` |
 | `FIRST_ADMIN_USERNAME` | 首次启动自动创建的管理员账号 | `admin` |
 | `FIRST_ADMIN_PASSWORD` | 首次启动自动创建的管理员密码 | 强随机字符串 |
+| `WEB_PORT` | 前端容器绑定到宿主机的本地端口 | `3000` |
+| `API_PORT` | API 容器绑定到宿主机的本地端口 | `8000` |
+| `IMAGE_REGISTRY` | 可选 Docker 镜像前缀，用于 Docker Hub 网络不可用时切换镜像源 | `docker.m.daocloud.io/library/` |
+| `PIP_INDEX_URL` | 可选 Python 包索引，用于构建后端镜像时加速依赖安装 | `https://pypi.tuna.tsinghua.edu.cn/simple` |
+| `AI_MONITOR_ADMIN_ONLY` | AI 模块管理员灰度开关 | `true` |
+| `AI_GATEWAY_DEFAULT_RATE_LIMIT` | 新建网关 Key 默认每分钟限额 | `60` |
+| `DEEPSEEK_BASE_URL` | DeepSeek API 地址 | `https://api.deepseek.com` |
 
 ---
 
@@ -144,7 +152,13 @@ POST   /api/transactions            # 添加流水
 GET    /api/analytics/trend/{id}    # 消费趋势
 GET    /api/analytics/comparison/{id}  # 环比/同比
 GET    /api/notifications           # 站内通知
+GET    /api/ai/overview             # AI 费用总览
+POST   /api/ai/accounts             # 新增 AI 厂商账号（管理员）
+POST   /api/ai-gateway/v1/chat/completions # DeepSeek OpenAI 兼容网关
 ```
+
+AI 费用监控的账号配置、价格版本、网关 Key 与生产操作说明见
+[`docs/ai-monitoring.md`](docs/ai-monitoring.md)。
 
 ---
 

@@ -2,13 +2,15 @@ import logging
 import uuid
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.database import AsyncSessionLocal
 from app.models import User, UserRole, UserStatus
-from app.routers import accounts, alerts, analytics, auth, budgets, notifications, users
+from app.routers import accounts, ai, ai_gateway, alerts, analytics, auth, budgets, notifications, transactions, users
 from app.security import hash_password
 from app.services.scheduler import start_scheduler, stop_scheduler
 
@@ -68,10 +70,37 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(accounts.router)
+app.include_router(transactions.router)
 app.include_router(alerts.router)
 app.include_router(analytics.router)
 app.include_router(notifications.router)
 app.include_router(budgets.router)
+app.include_router(ai.router)
+app.include_router(ai_gateway.router)
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    if request.url.path.startswith("/api/ai-gateway/"):
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"error": {
+                "message": str(exc.detail), "type": "invalid_request_error",
+                "param": None, "code": f"http_{exc.status_code}",
+            }},
+            headers=exc.headers,
+        )
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail}, headers=exc.headers)
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    # Validation bodies can contain passwords or provider API keys.
+    errors = [
+        {key: value for key, value in error.items() if key not in {"input", "ctx"}}
+        for error in exc.errors()
+    ]
+    return JSONResponse(status_code=422, content={"detail": errors})
 
 
 @app.get("/health")

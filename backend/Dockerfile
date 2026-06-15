@@ -1,16 +1,18 @@
-FROM python:3.12-slim
+ARG IMAGE_REGISTRY=
+FROM ${IMAGE_REGISTRY}python:3.12-slim
+ARG PIP_INDEX_URL=
 
 WORKDIR /app
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
-
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN if [ -n "$PIP_INDEX_URL" ]; then \
+        pip install --no-cache-dir -i "$PIP_INDEX_URL" -r requirements.txt; \
+    else \
+        pip install --no-cache-dir -r requirements.txt; \
+    fi
 
 COPY . .
 

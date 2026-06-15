@@ -1,7 +1,8 @@
 import uuid
+from typing import Annotated
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 
 from app.dependencies import CurrentUser, DB, require_roles
@@ -77,7 +78,7 @@ async def delete_account(
     account_id: uuid.UUID,
     db: DB,
     current_user: CurrentUser,
-    _=require_roles("admin"),
+    _admin: Annotated[object, Depends(require_roles("admin"))],
 ):
     acc = await _get_or_404(db, account_id)
     acc.deleted_at = datetime.now(timezone.utc)

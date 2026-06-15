@@ -38,6 +38,10 @@
           <el-icon><Wallet /></el-icon>
           <template #title>预算管理</template>
         </el-menu-item>
+        <el-menu-item v-if="auth.isAdmin" index="/ai-monitor">
+          <el-icon><Cpu /></el-icon>
+          <template #title>AI 费用监控</template>
+        </el-menu-item>
         <el-menu-item v-if="auth.isAdmin" index="/users">
           <el-icon><Setting /></el-icon>
           <template #title>用户管理</template>
@@ -106,6 +110,7 @@ const titleMap: Record<string, string> = {
   '/alerts': '提醒中心',
   '/analytics': '费用分析',
   '/budgets': '预算管理',
+  '/ai-monitor': 'AI 费用监控',
   '/users': '用户管理',
 }
 const currentTitle = computed(() => titleMap[route.path] || '')

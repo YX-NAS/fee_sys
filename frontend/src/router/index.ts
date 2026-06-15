@@ -21,6 +21,7 @@ const router = createRouter({
         { path: 'alerts', name: 'Alerts', component: () => import('@/pages/Alerts.vue') },
         { path: 'analytics', name: 'Analytics', component: () => import('@/pages/Analytics.vue') },
         { path: 'budgets', name: 'Budgets', component: () => import('@/pages/Budgets.vue') },
+        { path: 'ai-monitor', name: 'AIMonitor', component: () => import('@/pages/AIMonitor.vue'), meta: { roles: ['admin'] } },
         { path: 'users', name: 'Users', component: () => import('@/pages/Users.vue'), meta: { roles: ['admin'] } },
       ],
     },
@@ -32,6 +33,10 @@ router.beforeEach((to) => {
   const auth = useAuthStore()
   if (!to.meta.public && !auth.token) {
     return '/login'
+  }
+  const roles = to.meta.roles as string[] | undefined
+  if (roles && auth.user && !roles.includes(auth.user.role)) {
+    return '/dashboard'
   }
 })
 

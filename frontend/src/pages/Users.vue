@@ -11,7 +11,7 @@
       <el-table-column prop="role" label="角色" width="100">
         <template #default="{ row }">
           <el-tag :type="row.role === 'admin' ? 'danger' : row.role === 'operator' ? 'warning' : 'info'" size="small">
-            {{ { admin: '管理员', operator: '运营', viewer: '只读' }[row.role] }}
+            {{ roleLabels[row.role as UserOut['role']] }}
           </el-tag>
         </template>
       </el-table-column>
@@ -90,6 +90,11 @@ const saving = ref(false)
 const editTarget = ref<UserOut | null>(null)
 const formRef = ref<FormInstance>()
 const form = reactive({ username: '', email: '', password: '', role: 'viewer', status: 'active' })
+const roleLabels: Record<UserOut['role'], string> = {
+  admin: '管理员',
+  operator: '运营',
+  viewer: '只读',
+}
 const rules = {
   username: [{ required: true }],
   email: [{ required: true, type: 'email' as const }],

@@ -10,6 +10,7 @@ from alembic import context
 from app.config import get_settings
 from app.database import Base
 import app.models  # noqa: F401 – ensure all models are registered
+import app.ai_models  # noqa: F401
 
 config = context.config
 
