@@ -119,10 +119,22 @@
         <el-table :data="alertRules">
           <el-table-column label="账号"><template #default="{ row }">{{ accountName(row.provider_account_id) }}</template></el-table-column>
           <el-table-column label="类型"><template #default="{ row }">{{ row.alert_type === 'balance_low' ? '余额不足' : '同步失败' }}</template></el-table-column>
-          <el-table-column prop="threshold_amount" label="余额阈值" />
-          <el-table-column prop="failure_count" label="失败次数" />
-          <el-table-column label="启用"><template #default="{ row }"><el-switch v-model="row.is_enabled" @change="saveAlert(row)" /></template></el-table-column>
-          <el-table-column label="站内通知"><template #default="{ row }"><el-switch v-model="row.notify_inapp" @change="saveAlert(row)" /></template></el-table-column>
+          <el-table-column label="余额阈值" width="150"><template #default="{ row }">
+            <el-input v-if="row.alert_type === 'balance_low'" v-model="row.threshold_amount" placeholder="阈值金额" />
+            <span v-else>-</span>
+          </template></el-table-column>
+          <el-table-column label="失败次数" width="100"><template #default="{ row }">
+            <el-input-number v-if="row.alert_type === 'sync_failed'" v-model="row.failure_count" :min="1" :max="20" size="small" controls-position="right" />
+            <span v-else>-</span>
+          </template></el-table-column>
+          <el-table-column label="冷却(h)" width="90"><template #default="{ row }">
+            <el-input-number v-model="row.cooldown_hours" :min="1" :max="720" size="small" controls-position="right" />
+          </template></el-table-column>
+          <el-table-column label="启用" width="70"><template #default="{ row }"><el-switch v-model="row.is_enabled" size="small" @change="saveAlert(row)" /></template></el-table-column>
+          <el-table-column label="站内通知" width="100"><template #default="{ row }"><el-switch v-model="row.notify_inapp" size="small" @change="saveAlert(row)" /></template></el-table-column>
+          <el-table-column label="操作" width="80"><template #default="{ row }">
+            <el-button link type="primary" @click="saveAlert(row)">保存</el-button>
+          </template></el-table-column>
         </el-table>
         <h3 class="subhead">最近告警</h3>
         <el-table :data="alertEvents">
