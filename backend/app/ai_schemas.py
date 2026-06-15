@@ -51,6 +51,11 @@ def _validate_provider_url(provider: AIProvider, base_url: str | None) -> None:
         raise ValueError("阿里云 DashScope API 地址仅允许 dashscope.aliyuncs.com")
     if provider == AIProvider.huawei and not parsed.hostname.endswith(".myhuaweicloud.com"):
         raise ValueError("华为云 API 地址必须以 .myhuaweicloud.com 结尾")
+    if provider == AIProvider.zhipu and parsed.hostname != "open.bigmodel.cn":
+        raise ValueError("智谱 API 地址仅允许 open.bigmodel.cn")
+    if provider == AIProvider.siliconflow and parsed.hostname != "api.siliconflow.cn":
+        raise ValueError("硅基流动 API 地址仅允许 api.siliconflow.cn")
+        raise ValueError("华为云 API 地址必须以 .myhuaweicloud.com 结尾")
         raise ValueError("火山引擎 API 地址仅允许 open.volcengineapi.com")
 
 

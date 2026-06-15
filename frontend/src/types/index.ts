@@ -142,7 +142,7 @@ export interface PagedResponse<T> {
   items: T[]
 }
 
-export type AIProvider = 'deepseek' | 'volcengine' | 'kimi' | 'alibaba' | 'huawei'
+export type AIProvider = 'deepseek' | 'volcengine' | 'kimi' | 'alibaba' | 'huawei' | 'zhipu' | 'siliconflow'
 
 export interface AIAccount {
   id: string

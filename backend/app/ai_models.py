@@ -20,6 +20,8 @@ class AIProvider(str, enum.Enum):
     kimi = "kimi"
     alibaba = "alibaba"
     huawei = "huawei"
+    zhipu = "zhipu"
+    siliconflow = "siliconflow"
 
 
 class AIAccountStatus(str, enum.Enum):

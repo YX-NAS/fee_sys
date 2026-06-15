@@ -100,7 +100,7 @@
       <el-tab-pane label="网关 Key" name="keys">
         <div class="toolbar">
           <el-select v-model="keyAccount" placeholder="选择 DeepSeek 账号" @change="loadKeys">
-            <el-option v-for="item in deepseekAccounts" :key="item.id" :label="item.name" :value="item.id" />
+            <el-option v-for="item in gatewayAccounts" :key="item.id" :label="item.name" :value="item.id" />
           </el-select>
           <el-button type="primary" :icon="Key" :disabled="!keyAccount" @click="keyDialog = true">创建 Key</el-button>
           <code class="base-url">Base URL: https://fee.5176nas.online/api/ai-gateway/v1</code>
@@ -297,8 +297,8 @@ const createdSecret = ref('')
 const keyForm = ref({ name: '', rate_limit_per_minute: 60, expires_at: null as string | null })
 const priceDialog = ref(false)
 const priceForm = ref<any>({})
-const providerOptions = [{ label: 'DeepSeek', value: 'deepseek' }, { label: '火山引擎', value: 'volcengine' }, { label: 'Kimi', value: 'kimi' }, { label: '阿里云', value: 'alibaba' }, { label: '华为云', value: 'huawei' }]
-const deepseekAccounts = computed(() => accounts.value.filter(a => a.provider === 'deepseek' || a.provider === 'kimi'))
+const providerOptions = [{ label: 'DeepSeek', value: 'deepseek' }, { label: '火山引擎', value: 'volcengine' }, { label: 'Kimi', value: 'kimi' }, { label: '阿里云', value: 'alibaba' }, { label: '华为云', value: 'huawei' }, { label: '智谱', value: 'zhipu' }, { label: '硅基流动', value: 'siliconflow' }]
+const gatewayAccounts = computed(() => accounts.value.filter(a => a.provider === "deepseek" || a.provider === "kimi" || a.provider === "siliconflow"))
 const summaryCards = computed(() => [
   { label: '今日费用', value: `¥${overview.value?.today_cost || '0'}` },
   { label: '昨日费用', value: `¥${overview.value?.yesterday_cost || '0'}` },
@@ -309,7 +309,7 @@ const summaryCards = computed(() => [
 
 function isApiKeyProvider(p?: string) { return p === "deepseek" || p === "kimi" }
 function providerName(provider: AIProvider) {
-  const map: Record<string, string> = { deepseek: "DeepSeek", volcengine: "火山引擎", kimi: "Kimi", alibaba: "阿里云", huawei: "华为云" }
+  const map: Record<string, string> = { deepseek: "DeepSeek", volcengine: "火山引擎", kimi: "Kimi", alibaba: "阿里云", huawei: "华为云", zhipu: "智谱", siliconflow: "硅基流动" }
   return map[provider] || provider }
 function accountName(id: string) { return accounts.value.find(a => a.id === id)?.name || id.slice(0, 8) }
 function formatTime(value: string | null) { return value ? dayjs(value).format('YYYY-MM-DD HH:mm') : '-' }
@@ -319,7 +319,7 @@ async function loadAll() {
   try {
     accounts.value = await aiApi.accounts()
     overview.value = await aiApi.overview()
-    if (!keyAccount.value && deepseekAccounts.value.length) keyAccount.value = deepseekAccounts.value[0].id
+    if (!keyAccount.value && gatewayAccounts.value.length) keyAccount.value = gatewayAccounts.value[0].id
     await Promise.all([loadUsage(), loadPrices(), loadSyncRuns(), loadAlerts(), loadKeys()])
   } finally { loading.value = false }
 }
