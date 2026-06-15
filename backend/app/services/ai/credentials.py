@@ -6,7 +6,9 @@ from app.services.ai.security import decrypt_credentials
 
 
 def credential_type_for(provider: AIProvider) -> str:
-    return "api_key" if provider == AIProvider.deepseek else "ak_sk"
+    if provider in (AIProvider.deepseek, AIProvider.kimi):
+        return "api_key"
+    return "ak_sk"
 
 
 def validate_api_credentials(
@@ -15,13 +17,13 @@ def validate_api_credentials(
     expected_type = credential_type_for(provider)
     if credential_type != expected_type:
         raise ValueError(f"{provider.value} 仅支持 {expected_type} 类型凭据")
-    required = {"api_key"} if provider == AIProvider.deepseek else {"access_key_id", "secret_access_key"}
+    required = {"api_key"} if provider in (AIProvider.deepseek, AIProvider.kimi) else {"access_key_id", "secret_access_key"}
     if not required.issubset(credentials) or any(not str(credentials[key]).strip() for key in required):
         raise ValueError("官方 API 凭据缺少必填字段")
 
 
 def api_credential_hint(provider: AIProvider, credentials: dict[str, str]) -> str:
-    value = credentials["api_key"] if provider == AIProvider.deepseek else credentials["access_key_id"]
+    value = credentials["api_key"] if provider in (AIProvider.deepseek, AIProvider.kimi) else credentials["access_key_id"]
     value = str(value)
     if len(value) <= 8:
         return f"{value[:2]}***"

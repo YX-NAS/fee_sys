@@ -285,7 +285,7 @@ const createdSecret = ref('')
 const keyForm = ref({ name: '', rate_limit_per_minute: 60, expires_at: null as string | null })
 const priceDialog = ref(false)
 const priceForm = ref<any>({})
-const providerOptions = [{ label: 'DeepSeek', value: 'deepseek' }, { label: '火山引擎', value: 'volcengine' }]
+const providerOptions = [{ label: 'DeepSeek', value: 'deepseek' }, { label: '火山引擎', value: 'volcengine' }, { label: 'Kimi', value: 'kimi' }, { label: '阿里云', value: 'alibaba' }, { label: '华为云', value: 'huawei' }]
 const deepseekAccounts = computed(() => accounts.value.filter(a => a.provider === 'deepseek'))
 const summaryCards = computed(() => [
   { label: '今日费用', value: `¥${overview.value?.today_cost || '0'}` },
@@ -295,7 +295,9 @@ const summaryCards = computed(() => [
   { label: '异常账号', value: String(overview.value?.abnormal_account_count || 0) },
 ])
 
-function providerName(provider: AIProvider) { return provider === 'deepseek' ? 'DeepSeek' : '火山引擎' }
+function providerName(provider: AIProvider) {
+  const map: Record<string, string> = { deepseek: "DeepSeek", volcengine: "火山引擎", kimi: "Kimi", alibaba: "阿里云", huawei: "华为云" }
+  return map[provider] || provider }
 function accountName(id: string) { return accounts.value.find(a => a.id === id)?.name || id.slice(0, 8) }
 function formatTime(value: string | null) { return value ? dayjs(value).format('YYYY-MM-DD HH:mm') : '-' }
 

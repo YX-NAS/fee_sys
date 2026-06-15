@@ -17,6 +17,9 @@ from app.models import utcnow
 class AIProvider(str, enum.Enum):
     deepseek = "deepseek"
     volcengine = "volcengine"
+    kimi = "kimi"
+    alibaba = "alibaba"
+    huawei = "huawei"
 
 
 class AIAccountStatus(str, enum.Enum):

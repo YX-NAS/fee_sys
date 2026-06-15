@@ -44,6 +44,14 @@ def _validate_provider_url(provider: AIProvider, base_url: str | None) -> None:
         raise ValueError("DeepSeek API 地址仅允许 api.deepseek.com")
     if provider == AIProvider.volcengine and parsed.hostname != "open.volcengineapi.com":
         raise ValueError("火山引擎 API 地址仅允许 open.volcengineapi.com")
+        raise ValueError("火山引擎 API 地址仅允许 open.volcengineapi.com")
+    if provider == AIProvider.kimi and parsed.hostname not in ("api.moonshot.cn", "api.moonshot.net"):
+        raise ValueError("Kimi API 地址仅允许 api.moonshot.cn")
+    if provider == AIProvider.alibaba and parsed.hostname != "dashscope.aliyuncs.com":
+        raise ValueError("阿里云 DashScope API 地址仅允许 dashscope.aliyuncs.com")
+    if provider == AIProvider.huawei and not parsed.hostname.endswith(".myhuaweicloud.com"):
+        raise ValueError("华为云 API 地址必须以 .myhuaweicloud.com 结尾")
+        raise ValueError("火山引擎 API 地址仅允许 open.volcengineapi.com")
 
 
 class AIAccountOut(BaseModel):
