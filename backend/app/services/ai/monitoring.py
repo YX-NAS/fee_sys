@@ -239,9 +239,9 @@ async def sync_account_usage(
     return run
 
 
-async def rebuild_deepseek_daily(db: AsyncSession, usage_date: date) -> int:
+async def rebuild_gateway_daily(db: AsyncSession, usage_date: date) -> int:
     account_ids = (
-        await db.execute(select(AIProviderAccount.id).where(AIProviderAccount.provider == AIProvider.deepseek))
+        await db.execute(select(AIProviderAccount.id).where(AIProviderAccount.provider.in_([AIProvider.deepseek, AIProvider.kimi])))
     ).scalars().all()
     count = 0
     for account_id in account_ids:
@@ -303,6 +303,30 @@ async def evaluate_ai_alerts(
             triggered, value = balance < rule.threshold_amount, balance
         elif rule.alert_type == AIAlertType.sync_failed:
             triggered, value = account.consecutive_failures >= rule.failure_count, Decimal(account.consecutive_failures)
+        elif rule.alert_type == AIAlertType.cost_spike and rule.threshold_amount is not None:
+            today = datetime.now().date()
+            week_ago = today - timedelta(days=7)
+            async def _cost_since(start):
+                r = await db.execute(
+                    select(func.coalesce(func.sum(func.coalesce(AIDailyUsage.provider_reported_cost, AIDailyUsage.calculated_cost)), 0))
+                    .where(AIDailyUsage.provider_account_id == account.id, AIDailyUsage.usage_date >= start)
+                )
+                return r.scalar() or Decimal("0")
+            today_cost = await _cost_since(today)
+            week_total = await _cost_since(week_ago)
+            avg = week_total / Decimal("7") if week_total > 0 else Decimal("1")
+            multiplier = rule.threshold_amount
+            triggered, value = today_cost > avg * multiplier, today_cost
+        elif rule.alert_type == AIAlertType.no_usage:
+            today = datetime.now().date()
+            yesterday = today - timedelta(days=1)
+            count = (await db.execute(
+                select(func.count(AIDailyUsage.id)).where(
+                    AIDailyUsage.provider_account_id == account.id,
+                    AIDailyUsage.usage_date.in_([yesterday, today]),
+                )
+            )).scalar() or 0
+            triggered, value = count == 0, Decimal("0")
         if not triggered:
             continue
         message = (

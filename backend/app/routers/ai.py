@@ -97,17 +97,17 @@ async def create_account(body: AIAccountCreate, db: DB, user: User = Depends(req
         _validate_provider_url(body.provider, body.base_url)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from None
-    if not body.portal_username.strip() or not body.portal_password:
-        raise HTTPException(status_code=422, detail="请填写厂商官网登录用户名和密码")
+    portal_user = body.portal_username.strip() if body.portal_username else None
+    portal_pass = body.portal_password.strip() if body.portal_password else None
     item = AIProviderAccount(
         **body.model_dump(exclude={"portal_username", "portal_password"}),
-        portal_username_encrypted=encrypt_text(body.portal_username),
-        portal_password_encrypted=encrypt_text(body.portal_password),
+        portal_username_encrypted=encrypt_text(portal_user) if portal_user else None,
+        portal_password_encrypted=encrypt_text(portal_pass) if portal_pass else None,
         created_by_id=user.id,
     )
     db.add(item)
     await db.flush()
-    for alert_type in (AIAlertType.balance_low, AIAlertType.sync_failed):
+    for alert_type in AIAlertType:
         db.add(AIAlertRule(
             provider_account_id=item.id, alert_type=alert_type,
             failure_count=2, is_enabled=False,

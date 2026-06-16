@@ -1,4 +1,6 @@
+from datetime import date
 from decimal import Decimal
+from typing import Any
 
 import httpx
 
@@ -34,3 +36,42 @@ class SiliconFlowAdapter(ProviderAdapter):
             "credit_used": None,
             "currency": "CNY",
         }
+
+    async def fetch_usage(self, start_date: date, end_date: date) -> list[dict[str, Any]]:
+        rows: list[dict[str, Any]] = []
+        async with httpx.AsyncClient(timeout=30) as client:
+            response = await client.get(
+                f"{self.base_url}/user/usage",
+                params={"start_date": start_date.isoformat(), "end_date": end_date.isoformat()},
+                headers=self.headers(),
+            )
+            response.raise_for_status()
+            payload = response.json()
+        data = (payload.get("data") or {})
+        items = data.get("records") or data.get("items") or data.get("models") or []
+        for item in items:
+            if isinstance(item, dict):
+                rows.append({
+                    "usage_date": start_date,
+                    "model": item.get("model") or item.get("model_name", "unknown"),
+                    "input_tokens": int(item.get("input_tokens") or item.get("prompt_tokens") or 0),
+                    "output_tokens": int(item.get("output_tokens") or item.get("completion_tokens") or 0),
+                    "cached_input_tokens": 0,
+                    "reasoning_tokens": 0,
+                    "total_tokens": int(item.get("total_tokens") or 0),
+                    "request_count": int(item.get("request_count") or item.get("count") or 0),
+                })
+        if not rows:
+            summary = data.get("summary") or {}
+            if summary.get("total_tokens"):
+                rows.append({
+                    "usage_date": start_date,
+                    "model": "siliconflow-batch",
+                    "input_tokens": int(summary.get("input_tokens") or summary.get("prompt_tokens") or 0),
+                    "output_tokens": int(summary.get("output_tokens") or summary.get("completion_tokens") or 0),
+                    "cached_input_tokens": 0,
+                    "reasoning_tokens": 0,
+                    "total_tokens": int(summary.get("total_tokens") or 0),
+                    "request_count": int(summary.get("request_count") or 0),
+                })
+        return rows

@@ -118,7 +118,7 @@
       <el-tab-pane label="告警" name="alerts">
         <el-table :data="alertRules">
           <el-table-column label="账号"><template #default="{ row }">{{ accountName(row.provider_account_id) }}</template></el-table-column>
-          <el-table-column label="类型"><template #default="{ row }">{{ row.alert_type === 'balance_low' ? '余额不足' : '同步失败' }}</template></el-table-column>
+          <el-table-column label="类型"><template #default="{ row }">{{ alertTypeLabel(row.alert_type) }}</template></el-table-column>
           <el-table-column label="余额阈值" width="150"><template #default="{ row }">
             <el-input v-if="row.alert_type === 'balance_low'" v-model="row.threshold_amount" placeholder="阈值金额" />
             <span v-else>-</span>
@@ -310,6 +310,7 @@ const summaryCards = computed(() => [
 ])
 
 function isApiKeyProvider(p?: string) { return p === "deepseek" || p === "kimi" || p === "zhipu" || p === "siliconflow" }
+function alertTypeLabel(t: string) { const m: Record<string, string> = { balance_low: "余额不足", sync_failed: "同步失败", cost_spike: "费用突增", no_usage: "无用量数据" }; return m[t] || t }
 function providerName(provider: AIProvider) {
   const map: Record<string, string> = { deepseek: "DeepSeek", volcengine: "火山引擎", kimi: "Kimi", alibaba: "阿里云", huawei: "华为云", zhipu: "智谱", siliconflow: "硅基流动" }
   return map[provider] || provider }
@@ -361,7 +362,7 @@ async function saveAccount() {
   if (form.portal_password) payload.portal_password = form.portal_password
   if (editingAccount.value) await aiApi.updateAccount(editingAccount.value.id, payload)
   else {
-    if (!form.portal_username || !form.portal_password) return ElMessage.warning('请填写厂商官网登录用户名和密码')
+    if (!form.portal_username || !form.portal_password) return ElMessage.warning('请填写厂商官网登录用户名 (可选)和密码')
     payload.provider = form.provider
     await aiApi.createAccount(payload)
   }

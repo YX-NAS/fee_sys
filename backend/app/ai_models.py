@@ -56,6 +56,8 @@ class AIRequestStatus(str, enum.Enum):
 class AIAlertType(str, enum.Enum):
     balance_low = "balance_low"
     sync_failed = "sync_failed"
+    cost_spike = "cost_spike"
+    no_usage = "no_usage"
 
 
 class AIAlertEventStatus(str, enum.Enum):

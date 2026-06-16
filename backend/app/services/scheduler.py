@@ -59,10 +59,10 @@ async def _run_ai_balance_sync() -> None:
 async def _run_deepseek_aggregation() -> None:
     from datetime import datetime, timedelta
     from app.database import AsyncSessionLocal
-    from app.services.ai.monitoring import rebuild_deepseek_daily
+    from app.services.ai.monitoring import rebuild_gateway_daily
     target = datetime.now().date() - timedelta(days=1)
     async with AsyncSessionLocal() as db:
-        count = await rebuild_deepseek_daily(db, target)
+        count = await rebuild_gateway_daily(db, target)
         await db.commit()
     logger.info("[Scheduler] DeepSeek 日汇总完成, date=%s rows=%s", target, count)
 
