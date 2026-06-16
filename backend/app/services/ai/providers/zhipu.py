@@ -23,7 +23,7 @@ class ZhipuAdapter(ProviderAdapter):
 
     async def fetch_balance(self) -> dict:
         async with httpx.AsyncClient(timeout=20) as client:
-            response = await client.get(f"{self.base_url}/account/info", headers=self.headers())
+            response = await client.get(f"{self.base_url}/user/info", headers=self.headers())
             response.raise_for_status()
             payload = response.json()
         data = (payload.get("data") or {})

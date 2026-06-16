@@ -309,7 +309,7 @@ const summaryCards = computed(() => [
   { label: '异常账号', value: String(overview.value?.abnormal_account_count || 0) },
 ])
 
-function isApiKeyProvider(p?: string) { return p === "deepseek" || p === "kimi" }
+function isApiKeyProvider(p?: string) { return p === "deepseek" || p === "kimi" || p === "zhipu" || p === "siliconflow" }
 function providerName(provider: AIProvider) {
   const map: Record<string, string> = { deepseek: "DeepSeek", volcengine: "火山引擎", kimi: "Kimi", alibaba: "阿里云", huawei: "华为云", zhipu: "智谱", siliconflow: "硅基流动" }
   return map[provider] || provider }
