@@ -105,8 +105,10 @@ BACKUP_FILE="/opt/fee_sys/fee_sys_backup_$(date +%Y%m%d_%H%M%S).sql"
 sudo docker compose exec -T postgres pg_dump -U fee_user fee_sys | sudo tee "$BACKUP_FILE" > /dev/null
 echo "[服务器] 数据库已备份: $BACKUP_FILE"
 
-echo "[服务器] === 2. 拉取最新代码 ==="
-sudo git pull --ff-only
+echo "[服务器] === 2. 同步代码 (强制重置) ==="
+sudo git fetch origin
+sudo git clean -fd
+sudo git reset --hard origin/main
 
 echo "[服务器] === 3. 重建容器 ==="
 sudo docker compose build
