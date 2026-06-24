@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 
 from app.ai_models import (
-    AIAlertEvent, AIAlertEventStatus, AIAlertRule, AIAlertType, AIBalanceSnapshot, AIDailyUsage,
+    AIAlertEvent, AIAlertRule, AIAlertType, AIBalanceSnapshot, AIDailyUsage,
     AIGatewayKey, AIGatewayKeyStatus, AIModelPrice, AIProviderAccount,
     AIProviderAPICredential, AISyncRun,
 )
@@ -20,7 +20,7 @@ from app.ai_schemas import (
 from app.ai_schemas import _validate_provider_url
 from app.config import get_settings
 from app.dependencies import CurrentUser, DB, require_roles
-from app.models import User, UserRole
+from app.models import AlertEventStatus, User, UserRole
 from app.security import encrypt_text
 from app.services.ai.credentials import (
     api_credential_hint, validate_api_credentials,
@@ -107,10 +107,13 @@ async def create_account(body: AIAccountCreate, db: DB, user: User = Depends(req
     )
     db.add(item)
     await db.flush()
+    from app.ai_models import ai_default_severity_for
     for alert_type in AIAlertType:
         db.add(AIAlertRule(
             provider_account_id=item.id, alert_type=alert_type,
-            failure_count=2, is_enabled=False,
+            severity=ai_default_severity_for(alert_type),
+            failure_count=2,
+            is_enabled=alert_type in (AIAlertType.balance_low, AIAlertType.sync_failed),
         ))
     await db.flush()
     return await _account_out(db, item)
@@ -435,9 +438,15 @@ async def update_alert(account_id: uuid.UUID, alert_type: str, body: AIAlertRule
         AIAlertRule.provider_account_id == account_id, AIAlertRule.alert_type == body.alert_type,
     ))).scalar_one_or_none()
     if not rule:
-        rule = AIAlertRule(provider_account_id=account_id, alert_type=body.alert_type)
+        from app.ai_models import ai_default_severity_for
+        rule = AIAlertRule(
+            provider_account_id=account_id, alert_type=body.alert_type,
+            severity=body.severity or ai_default_severity_for(body.alert_type),
+        )
         db.add(rule)
     values = body.model_dump(exclude={"webhook_url"})
+    if values.get("severity") is None:
+        values.pop("severity", None)
     for key, value in values.items():
         setattr(rule, key, value)
     if body.webhook_url:
@@ -451,7 +460,7 @@ async def acknowledge_alert(event_id: uuid.UUID, db: DB, user: CurrentUser):
     event = (await db.execute(select(AIAlertEvent).where(AIAlertEvent.id == event_id))).scalar_one_or_none()
     if not event:
         raise HTTPException(status_code=404, detail="告警事件不存在")
-    event.status = AIAlertEventStatus.acknowledged
+    event.status = AlertEventStatus.acknowledged
     event.acknowledged_at = datetime.now(timezone.utc)
     event.acknowledged_by_id = user.id
     await db.flush()

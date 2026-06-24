@@ -42,10 +42,14 @@ export interface TransactionOut {
   created_at: string
 }
 
+export type AlertSeverity = 'info' | 'warning' | 'critical'
+export type AlertEventStatus = 'pending' | 'sent' | 'failed' | 'acknowledged'
+
 export interface AlertConfigOut {
   id: string
   account_id: string
   alert_type: 'balance_low' | 'recharge_due'
+  severity: AlertSeverity
   threshold_amount: string | null
   recharge_cycle_days: number | null
   last_recharge_date: string | null
@@ -63,14 +67,61 @@ export interface AlertEventOut {
   config_id: string | null
   account_id: string
   alert_type: 'balance_low' | 'recharge_due'
+  severity: AlertSeverity
   triggered_value: string | null
   threshold_value: string | null
-  status: 'pending' | 'sent' | 'failed' | 'acknowledged'
+  status: AlertEventStatus
   inapp_status: 'pending' | 'sent' | 'failed' | 'skipped'
   webhook_status: 'pending' | 'sent' | 'failed' | 'skipped'
   retry_count: number
   created_at: string
   acknowledged_at: string | null
+}
+
+export interface AIAlertRuleOut {
+  id: string
+  provider_account_id: string
+  alert_type: 'balance_low' | 'sync_failed' | 'cost_spike' | 'no_usage'
+  severity: AlertSeverity
+  threshold_amount: string | null
+  failure_count: number
+  cooldown_hours: number
+  notify_inapp: boolean
+  notify_webhook: boolean
+  webhook_type: string | null
+  is_enabled: boolean
+  last_triggered_at: string | null
+}
+
+export interface AIAlertEventOut {
+  id: string
+  provider_account_id: string
+  alert_type: 'balance_low' | 'sync_failed' | 'cost_spike' | 'no_usage'
+  severity: AlertSeverity
+  triggered_value: string | null
+  threshold_value: string | null
+  message: string
+  status: AlertEventStatus
+  inapp_status: 'pending' | 'sent' | 'failed' | 'skipped'
+  webhook_status: 'pending' | 'sent' | 'failed' | 'skipped'
+  retry_count: number
+  created_at: string
+  acknowledged_at: string | null
+}
+
+export interface AlertSummary {
+  total_unresolved: number
+  by_severity: Record<string, number>
+  recent: Array<{
+    id: string
+    source: 'fee' | 'ai'
+    account_name: string
+    alert_type: string
+    severity: AlertSeverity
+    status: AlertEventStatus
+    message: string | null
+    created_at: string
+  }>
 }
 
 export interface NotificationOut {

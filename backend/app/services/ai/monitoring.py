@@ -14,8 +14,11 @@ from app.ai_models import (
     AIAccountStatus, AIAlertEvent, AIAlertRule, AIAlertType, AIBalanceSnapshot,
     AICostSource, AIDailyUsage, AIGatewayRequest, AIModelPrice, AIProvider,
     AIProviderAccount, AIRequestStatus, AISyncRun, AISyncStatus,
+    ai_default_severity_for,
 )
-from app.models import Notification, User, UserRole, UserStatus
+from app.models import (
+    AlertEventStatus, ChannelStatus, Notification, User, UserRole, UserStatus,
+)
 from app.services.ai.pricing import calculate_token_cost
 from app.services.ai.providers import create_adapter
 from app.services.ai.credentials import load_default_api_credentials
@@ -222,6 +225,9 @@ async def sync_account_usage(
         account.last_sync_error = None
         account.consecutive_failures = 0
         account.status = AIAccountStatus.active
+        await db.flush()
+        # 用量同步成功后也评估 cost_spike / no_usage 告警
+        await evaluate_ai_alerts(db, account, sync_type="usage")
     except Exception as exc:
         message = sanitize_provider_error(exc)
         run.status = AISyncStatus.failed
@@ -283,8 +289,14 @@ async def rebuild_gateway_daily(db: AsyncSession, usage_date: date) -> int:
 
 
 async def evaluate_ai_alerts(
-    db: AsyncSession, account: AIProviderAccount, balance: Decimal | None = None,
+    db: AsyncSession, account: AIProviderAccount,
+    balance: Decimal | None = None, sync_type: str | None = None,
 ) -> None:
+    """评估 AI 账号的告警规则。
+
+    sync_type="usage" 时只评估 cost_spike / no_usage；
+    balance 传入时评估全部规则；两者均无时只评估 sync_failed。
+    """
     rules = (
         await db.execute(
             select(AIAlertRule).where(
@@ -293,30 +305,59 @@ async def evaluate_ai_alerts(
             )
         )
     ).scalars().all()
+    if not rules:
+        return
     now = datetime.now(timezone.utc)
+    admin_ids = (
+        await db.execute(
+            select(User.id).where(
+                User.status == UserStatus.active,
+                User.role.in_([UserRole.admin, UserRole.operator]),
+            )
+        )
+    ).scalars().all()
+
     for rule in rules:
         if rule.last_triggered_at and now - rule.last_triggered_at < timedelta(hours=rule.cooldown_hours):
             continue
+
+        # 决定是否评估该规则
+        if sync_type == "usage" and rule.alert_type not in (AIAlertType.cost_spike, AIAlertType.no_usage):
+            continue
+
         triggered = False
         value: Decimal | None = None
+        message = ""
+
         if rule.alert_type == AIAlertType.balance_low and balance is not None and rule.threshold_amount is not None:
-            triggered, value = balance < rule.threshold_amount, balance
+            triggered = balance < rule.threshold_amount
+            value = balance
+            message = f"AI 账号【{account.name}】余额 {balance} 低于阈值 {rule.threshold_amount}"
         elif rule.alert_type == AIAlertType.sync_failed:
-            triggered, value = account.consecutive_failures >= rule.failure_count, Decimal(account.consecutive_failures)
+            triggered = account.consecutive_failures >= rule.failure_count
+            value = Decimal(account.consecutive_failures)
+            message = f"AI 账号【{account.name}】已连续同步失败 {account.consecutive_failures} 次"
         elif rule.alert_type == AIAlertType.cost_spike and rule.threshold_amount is not None:
             today = datetime.now().date()
             week_ago = today - timedelta(days=7)
+
             async def _cost_since(start):
                 r = await db.execute(
                     select(func.coalesce(func.sum(func.coalesce(AIDailyUsage.provider_reported_cost, AIDailyUsage.calculated_cost)), 0))
                     .where(AIDailyUsage.provider_account_id == account.id, AIDailyUsage.usage_date >= start)
                 )
                 return r.scalar() or Decimal("0")
+
             today_cost = await _cost_since(today)
             week_total = await _cost_since(week_ago)
-            avg = week_total / Decimal("7") if week_total > 0 else Decimal("1")
-            multiplier = rule.threshold_amount
-            triggered, value = today_cost > avg * multiplier, today_cost
+            # 上周总消费为 0 时不触发突增告警（没有基线可比）
+            if week_total > 0:
+                avg = week_total / Decimal("7")
+                triggered = today_cost > avg * rule.threshold_amount
+            else:
+                triggered = False
+            value = today_cost
+            message = f"AI 账号【{account.name}】今日费用 {today_cost} 超过近 7 日日均的 {rule.threshold_amount} 倍"
         elif rule.alert_type == AIAlertType.no_usage:
             today = datetime.now().date()
             yesterday = today - timedelta(days=1)
@@ -326,36 +367,122 @@ async def evaluate_ai_alerts(
                     AIDailyUsage.usage_date.in_([yesterday, today]),
                 )
             )).scalar() or 0
-            triggered, value = count == 0, Decimal("0")
+            triggered = count == 0
+            value = Decimal("0")
+            message = f"AI 账号【{account.name}】昨日及今日均无用量数据"
+
         if not triggered:
             continue
-        message = (
-            f"AI 账号【{account.name}】余额 {value} 低于阈值 {rule.threshold_amount}"
-            if rule.alert_type == AIAlertType.balance_low
-            else f"AI 账号【{account.name}】已连续同步失败 {account.consecutive_failures} 次"
-        )
+
+        severity = rule.severity or ai_default_severity_for(rule.alert_type)
         event = AIAlertEvent(
             rule_id=rule.id, provider_account_id=account.id, alert_type=rule.alert_type,
-            triggered_value=value, threshold_value=rule.threshold_amount, message=message,
+            severity=severity, triggered_value=value, threshold_value=rule.threshold_amount,
+            message=message, status=AlertEventStatus.pending,
+            inapp_status=ChannelStatus.pending if rule.notify_inapp else ChannelStatus.skipped,
+            webhook_status=ChannelStatus.pending if rule.notify_webhook else ChannelStatus.skipped,
         )
         db.add(event)
-        rule.last_triggered_at = now
-        if rule.notify_inapp:
-            users = (
-                await db.execute(
-                    select(User.id).where(
-                        User.status == UserStatus.active,
-                        User.role.in_([UserRole.admin, UserRole.operator]),
-                    )
-                )
-            ).scalars().all()
-            for user_id in users:
-                db.add(Notification(user_id=user_id, title="AI 费用监控告警", content=message))
+        await db.flush()
+
+        webhook_url = None
         if rule.notify_webhook and rule.webhook_url_encrypted and rule.webhook_type:
             try:
-                await _send_ai_webhook(rule.webhook_type, decrypt_text(rule.webhook_url_encrypted), message)
+                webhook_url = decrypt_text(rule.webhook_url_encrypted)
             except Exception:
-                logger.exception("AI 告警 webhook 发送失败, event_id=%s", event.id)
+                logger.warning("AI 告警 webhook URL 解密失败, rule_id=%s", rule.id)
+
+        await _dispatch_ai_alert_event(
+            db, event, account.name, rule.webhook_type, webhook_url,
+            rule.notify_inapp, rule.notify_webhook, admin_ids, severity,
+        )
+        rule.last_triggered_at = now
+        logger.info("AI 告警触发, account_id=%s type=%s severity=%s", account.id, rule.alert_type, severity)
+
+
+async def _dispatch_ai_alert_event(
+    db: AsyncSession, event: AIAlertEvent, account_name: str,
+    webhook_type: str | None, webhook_url: str | None,
+    notify_inapp: bool, notify_webhook: bool,
+    admin_ids: list, severity,
+) -> None:
+    """分发一条 AI 告警事件到启用的通道，并设置状态。"""
+    title = f"[{severity.value.upper()}] AI 费用监控告警 - {account_name}"
+    if notify_inapp:
+        try:
+            for uid in admin_ids:
+                db.add(Notification(user_id=uid, title=title, content=event.message))
+            await db.flush()
+            event.inapp_status = ChannelStatus.sent
+        except Exception:
+            logger.exception("AI 告警站内通知创建失败, event_id=%s", event.id)
+            event.inapp_status = ChannelStatus.failed
+    else:
+        event.inapp_status = ChannelStatus.skipped
+
+    if notify_webhook and webhook_url and webhook_type:
+        try:
+            await _send_ai_webhook(webhook_type, webhook_url, f"{title}\n{event.message}")
+            event.webhook_status = ChannelStatus.sent
+        except Exception:
+            logger.exception("AI 告警 webhook 发送失败, event_id=%s", event.id)
+            event.webhook_status = ChannelStatus.failed
+    else:
+        event.webhook_status = ChannelStatus.skipped
+
+    if (event.inapp_status in (ChannelStatus.sent, ChannelStatus.skipped) and
+            event.webhook_status in (ChannelStatus.sent, ChannelStatus.skipped)):
+        event.status = AlertEventStatus.sent
+    else:
+        event.status = AlertEventStatus.failed
+        event.retry_count += 1
+        event.last_retry_at = datetime.now(timezone.utc)
+    await db.flush()
+
+
+async def retry_failed_ai_alerts(db: AsyncSession) -> None:
+    """重试投递失败的 AI 告警事件（最多 MAX_RETRY 次）。"""
+    from app.services.notifications import MAX_RETRY
+    rules_by_id: dict = {}
+    accounts_by_id: dict = {}
+    result = await db.execute(
+        select(AIAlertEvent).where(
+            AIAlertEvent.status == AlertEventStatus.failed,
+            AIAlertEvent.retry_count < MAX_RETRY,
+        )
+    )
+    for event in result.scalars().all():
+        if event.rule_id and event.rule_id not in rules_by_id:
+            rule = (await db.execute(select(AIAlertRule).where(AIAlertRule.id == event.rule_id))).scalar_one_or_none()
+            rules_by_id[event.rule_id] = rule
+        rule = rules_by_id.get(event.rule_id) if event.rule_id else None
+        if rule is None:
+            continue
+        if event.provider_account_id not in accounts_by_id:
+            acc = (await db.execute(select(AIProviderAccount).where(AIProviderAccount.id == event.provider_account_id))).scalar_one_or_none()
+            accounts_by_id[event.provider_account_id] = acc
+        account = accounts_by_id.get(event.provider_account_id)
+        if account is None:
+            continue
+        webhook_url = None
+        if rule.webhook_url_encrypted and rule.webhook_type:
+            try:
+                webhook_url = decrypt_text(rule.webhook_url_encrypted)
+            except Exception:
+                pass
+        admin_ids = (
+            await db.execute(
+                select(User.id).where(
+                    User.status == UserStatus.active,
+                    User.role.in_([UserRole.admin, UserRole.operator]),
+                )
+            )
+        ).scalars().all()
+        await _dispatch_ai_alert_event(
+            db, event, account.name, rule.webhook_type, webhook_url,
+            rule.notify_inapp, rule.notify_webhook, admin_ids, event.severity,
+        )
+    await db.commit()
 
 
 async def _send_ai_webhook(webhook_type: str, url: str, message: str) -> None:

@@ -7,9 +7,10 @@ from urllib.parse import urlparse
 from pydantic import BaseModel, Field, model_validator
 
 from app.ai_models import (
-    AIAccountStatus, AIAlertEventStatus, AIAlertType, AICostSource,
+    AIAccountStatus, AIAlertType, AICostSource,
     AIGatewayKeyStatus, AIProvider, AISyncStatus,
 )
+from app.models import AlertEventStatus, AlertSeverity, ChannelStatus
 
 
 class AIAccountCreate(BaseModel):
@@ -179,6 +180,7 @@ class AIPriceOut(AIPriceCreate):
 
 class AIAlertRuleUpsert(BaseModel):
     alert_type: AIAlertType
+    severity: AlertSeverity | None = None
     threshold_amount: Decimal | None = Field(None, ge=0)
     failure_count: int = Field(2, ge=1, le=20)
     cooldown_hours: int = Field(24, ge=1, le=720)
@@ -193,6 +195,7 @@ class AIAlertRuleOut(BaseModel):
     id: uuid.UUID
     provider_account_id: uuid.UUID
     alert_type: AIAlertType
+    severity: AlertSeverity
     threshold_amount: Decimal | None
     failure_count: int
     cooldown_hours: int
@@ -208,10 +211,14 @@ class AIAlertEventOut(BaseModel):
     id: uuid.UUID
     provider_account_id: uuid.UUID
     alert_type: AIAlertType
+    severity: AlertSeverity
     triggered_value: Decimal | None
     threshold_value: Decimal | None
     message: str
-    status: AIAlertEventStatus
+    status: AlertEventStatus
+    inapp_status: ChannelStatus
+    webhook_status: ChannelStatus
+    retry_count: int
     created_at: datetime
     acknowledged_at: datetime | None
     model_config = {"from_attributes": True}

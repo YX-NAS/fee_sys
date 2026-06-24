@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import func, select
 
 from app.dependencies import CurrentUser, DB
-from app.models import Account, AlertConfig, AlertEvent, AlertEventStatus
+from app.models import Account, AlertConfig, AlertEvent, AlertEventStatus, AlertSeverity
 from app.schemas import AlertConfigCreate, AlertConfigOut, AlertConfigUpdate, AlertEventOut
 from app.security import encrypt_text
 
@@ -77,6 +77,9 @@ async def list_alert_events(
     current_user: CurrentUser,
     account_id: uuid.UUID | None = None,
     event_status: AlertEventStatus | None = None,
+    severity: AlertSeverity | None = None,
+    start_time: datetime | None = None,
+    end_time: datetime | None = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
 ):
@@ -86,12 +89,113 @@ async def list_alert_events(
         query = query.where(AlertEvent.account_id == account_id)
     if event_status:
         query = query.where(AlertEvent.status == event_status)
+    if severity:
+        query = query.where(AlertEvent.severity == severity)
+    if start_time:
+        query = query.where(AlertEvent.created_at >= start_time)
+    if end_time:
+        query = query.where(AlertEvent.created_at <= end_time)
 
     total = (await db.execute(select(func.count()).select_from(query.subquery()))).scalar()
     query = query.order_by(AlertEvent.created_at.desc()).offset((page - 1) * page_size).limit(page_size)
     items = (await db.execute(query)).scalars().all()
     return {"total": total, "page": page, "page_size": page_size,
             "items": [AlertEventOut.model_validate(e) for e in items]}
+
+
+@router.post("/events/batch-acknowledge", response_model=dict)
+async def batch_acknowledge_events(
+    body: dict, db: DB, current_user: CurrentUser,
+):
+    event_ids = body.get("event_ids", [])
+    if not event_ids:
+        raise HTTPException(status_code=400, detail="event_ids 不能为空")
+    ids = [uuid.UUID(e) for e in event_ids]
+    result = await db.execute(select(AlertEvent).where(AlertEvent.id.in_(ids)))
+    now = datetime.now(timezone.utc)
+    count = 0
+    for event in result.scalars().all():
+        if event.status != AlertEventStatus.acknowledged:
+            event.status = AlertEventStatus.acknowledged
+            event.acknowledged_at = now
+            event.acknowledged_by_id = current_user.id
+            count += 1
+    await db.flush()
+    return {"acknowledged": count}
+
+
+@router.get("/summary", response_model=dict)
+async def alert_summary(db: DB, current_user: CurrentUser):
+    """告警摘要：按严重级别统计未处理告警 + 最近告警列表（聚合费用 + AI）。"""
+    from app.ai_models import AIAlertEvent
+    from app.models import Account
+
+    # 费用告警未处理统计
+    fee_unresolved = (await db.execute(
+        select(AlertEvent.severity, func.count(AlertEvent.id)).where(
+            AlertEvent.status.in_([AlertEventStatus.pending, AlertEventStatus.sent, AlertEventStatus.failed])
+        ).group_by(AlertEvent.severity)
+    )).all()
+    ai_unresolved = (await db.execute(
+        select(AIAlertEvent.severity, func.count(AIAlertEvent.id)).where(
+            AIAlertEvent.status.in_([AlertEventStatus.pending, AlertEventStatus.sent, AlertEventStatus.failed])
+        ).group_by(AIAlertEvent.severity)
+    )).all()
+
+    severity_counts = {s.value: 0 for s in AlertSeverity}
+    for sev, cnt in list(fee_unresolved) + list(ai_unresolved):
+        severity_counts[sev.value] = severity_counts.get(sev.value, 0) + cnt
+
+    total_unresolved = sum(severity_counts.values())
+
+    # 最近告警（聚合两类，各取最近 10 条）
+    fee_recent = (await db.execute(
+        select(AlertEvent).where(AlertEvent.status != AlertEventStatus.acknowledged)
+        .order_by(AlertEvent.created_at.desc()).limit(10)
+    )).scalars().all()
+    ai_recent = (await db.execute(
+        select(AIAlertEvent).where(AIAlertEvent.status != AlertEventStatus.acknowledged)
+        .order_by(AIAlertEvent.created_at.desc()).limit(10)
+    )).scalars().all()
+
+    # 账号名映射
+    fee_account_ids = {e.account_id for e in fee_recent}
+    ai_account_ids = {e.provider_account_id for e in ai_recent}
+    fee_names = {}
+    if fee_account_ids:
+        fee_names = {a.id: a.name for a in (await db.execute(
+            select(Account).where(Account.id.in_(fee_account_ids))
+        )).scalars().all()}
+    ai_names = {}
+    if ai_account_ids:
+        from app.ai_models import AIProviderAccount
+        ai_names = {a.id: a.name for a in (await db.execute(
+            select(AIProviderAccount).where(AIProviderAccount.id.in_(ai_account_ids))
+        )).scalars().all()}
+
+    recent = []
+    for e in fee_recent:
+        recent.append({
+            "id": str(e.id), "source": "fee", "account_name": fee_names.get(e.account_id, "未知"),
+            "alert_type": e.alert_type.value, "severity": e.severity.value,
+            "status": e.status.value, "message": None,
+            "created_at": e.created_at.isoformat(),
+        })
+    for e in ai_recent:
+        recent.append({
+            "id": str(e.id), "source": "ai", "account_name": ai_names.get(e.provider_account_id, "未知"),
+            "alert_type": e.alert_type.value, "severity": e.severity.value,
+            "status": e.status.value, "message": e.message,
+            "created_at": e.created_at.isoformat(),
+        })
+    recent.sort(key=lambda x: x["created_at"], reverse=True)
+    recent = recent[:10]
+
+    return {
+        "total_unresolved": total_unresolved,
+        "by_severity": severity_counts,
+        "recent": recent,
+    }
 
 
 @router.post("/events/{event_id}/acknowledge", response_model=AlertEventOut)

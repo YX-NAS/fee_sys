@@ -5,7 +5,7 @@ from decimal import Decimal
 from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
 from app.models import (
-    AccountStatus, AccountType, AlertEventStatus, AlertType,
+    AccountStatus, AccountType, AlertEventStatus, AlertSeverity, AlertType,
     ChannelStatus, TransactionType, UserRole, UserStatus,
 )
 
@@ -143,6 +143,7 @@ class TransactionOut(BaseModel):
 class AlertConfigCreate(BaseModel):
     account_id: uuid.UUID
     alert_type: AlertType
+    severity: AlertSeverity | None = None
     threshold_amount: Decimal | None = None
     recharge_cycle_days: int | None = Field(None, ge=1)
     last_recharge_date: datetime | None = None
@@ -160,10 +161,13 @@ class AlertConfigCreate(BaseModel):
             raise ValueError("recharge_due 类型必须提供 recharge_cycle_days")
         if self.notify_webhook and not self.webhook_url:
             raise ValueError("启用 webhook 时必须提供 webhook_url")
+        if self.severity is None:
+            self.severity = AlertSeverity.critical if self.alert_type == AlertType.balance_low else AlertSeverity.warning
         return self
 
 
 class AlertConfigUpdate(BaseModel):
+    severity: AlertSeverity | None = None
     threshold_amount: Decimal | None = None
     recharge_cycle_days: int | None = Field(None, ge=1)
     last_recharge_date: datetime | None = None
@@ -179,6 +183,7 @@ class AlertConfigOut(BaseModel):
     id: uuid.UUID
     account_id: uuid.UUID
     alert_type: AlertType
+    severity: AlertSeverity
     threshold_amount: Decimal | None
     recharge_cycle_days: int | None
     last_recharge_date: datetime | None
@@ -200,6 +205,7 @@ class AlertEventOut(BaseModel):
     config_id: uuid.UUID | None
     account_id: uuid.UUID
     alert_type: AlertType
+    severity: AlertSeverity
     triggered_value: Decimal | None
     threshold_value: Decimal | None
     status: AlertEventStatus

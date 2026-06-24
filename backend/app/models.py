@@ -67,6 +67,21 @@ class ChannelStatus(str, enum.Enum):
     skipped = "skipped"
 
 
+class AlertSeverity(str, enum.Enum):
+    info = "info"
+    warning = "warning"
+    critical = "critical"
+
+
+def default_severity_for(alert_type: str) -> AlertSeverity:
+    """按告警类型给出默认严重级别。"""
+    if alert_type in ("balance_low", "sync_failed"):
+        return AlertSeverity.critical
+    if alert_type in ("cost_spike", "recharge_due"):
+        return AlertSeverity.warning
+    return AlertSeverity.info
+
+
 # ── User ─────────────────────────────────────────────────────────────────────
 
 class User(Base):
@@ -146,6 +161,7 @@ class AlertConfig(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     account_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("accounts.id", ondelete="CASCADE"), nullable=False, index=True)
     alert_type: Mapped[AlertType] = mapped_column(Enum(AlertType), nullable=False)
+    severity: Mapped[AlertSeverity] = mapped_column(Enum(AlertSeverity), default=AlertSeverity.warning, nullable=False)
     # balance_low
     threshold_amount: Mapped[Decimal | None] = mapped_column(Numeric(14, 4), nullable=True)
     # recharge_due
@@ -180,6 +196,7 @@ class AlertEvent(Base):
     config_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("alert_configs.id", ondelete="SET NULL"), nullable=True, index=True)
     account_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("accounts.id", ondelete="CASCADE"), nullable=False, index=True)
     alert_type: Mapped[AlertType] = mapped_column(Enum(AlertType), nullable=False)
+    severity: Mapped[AlertSeverity] = mapped_column(Enum(AlertSeverity), default=AlertSeverity.warning, nullable=False)
     triggered_value: Mapped[Decimal | None] = mapped_column(Numeric(14, 4), nullable=True)
     threshold_value: Mapped[Decimal | None] = mapped_column(Numeric(14, 4), nullable=True)
     status: Mapped[AlertEventStatus] = mapped_column(Enum(AlertEventStatus), default=AlertEventStatus.pending, nullable=False, index=True)

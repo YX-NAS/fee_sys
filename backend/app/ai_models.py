@@ -11,7 +11,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
-from app.models import utcnow
+from app.models import AlertEventStatus, AlertSeverity, ChannelStatus, utcnow
 
 
 class AIProvider(str, enum.Enum):
@@ -63,6 +63,14 @@ class AIAlertType(str, enum.Enum):
 class AIAlertEventStatus(str, enum.Enum):
     open = "open"
     acknowledged = "acknowledged"
+
+
+def ai_default_severity_for(alert_type: AIAlertType) -> AlertSeverity:
+    if alert_type in (AIAlertType.balance_low, AIAlertType.sync_failed):
+        return AlertSeverity.critical
+    if alert_type == AIAlertType.cost_spike:
+        return AlertSeverity.warning
+    return AlertSeverity.info
 
 
 class AIProviderAccount(Base):
@@ -253,6 +261,7 @@ class AIAlertRule(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     provider_account_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("ai_provider_accounts.id", ondelete="CASCADE"), nullable=False, index=True)
     alert_type: Mapped[AIAlertType] = mapped_column(Enum(AIAlertType), nullable=False)
+    severity: Mapped[AlertSeverity] = mapped_column(Enum(AlertSeverity), default=AlertSeverity.warning, nullable=False)
     threshold_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 8), nullable=True)
     failure_count: Mapped[int] = mapped_column(Integer, default=2, nullable=False)
     cooldown_hours: Mapped[int] = mapped_column(Integer, default=24, nullable=False)
@@ -275,10 +284,19 @@ class AIAlertEvent(Base):
     rule_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("ai_alert_rules.id", ondelete="SET NULL"), nullable=True)
     provider_account_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("ai_provider_accounts.id", ondelete="CASCADE"), nullable=False, index=True)
     alert_type: Mapped[AIAlertType] = mapped_column(Enum(AIAlertType), nullable=False)
+    severity: Mapped[AlertSeverity] = mapped_column(Enum(AlertSeverity), default=AlertSeverity.warning, nullable=False)
     triggered_value: Mapped[Decimal | None] = mapped_column(Numeric(18, 8), nullable=True)
     threshold_value: Mapped[Decimal | None] = mapped_column(Numeric(18, 8), nullable=True)
     message: Mapped[str] = mapped_column(Text, nullable=False)
-    status: Mapped[AIAlertEventStatus] = mapped_column(Enum(AIAlertEventStatus), default=AIAlertEventStatus.open, nullable=False)
+    status: Mapped[AlertEventStatus] = mapped_column(Enum(AlertEventStatus), default=AlertEventStatus.pending, nullable=False, index=True)
+    inapp_status: Mapped[ChannelStatus] = mapped_column(Enum(ChannelStatus), default=ChannelStatus.pending, nullable=False)
+    webhook_status: Mapped[ChannelStatus] = mapped_column(Enum(ChannelStatus), default=ChannelStatus.skipped, nullable=False)
+    retry_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    last_retry_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     acknowledged_by_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+
+    __table_args__ = (
+        Index("ix_ai_alert_events_status_created", "status", "created_at"),
+    )

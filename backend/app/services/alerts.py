@@ -49,6 +49,14 @@ async def check_balance_low(db: AsyncSession) -> None:
         )
     )
     configs = result.scalars().all()
+    if not configs:
+        return
+
+    admin_ids = await _get_admin_ids(db)
+    # 预加载所有相关账号，避免循环内逐条查询
+    account_ids = {cfg.account_id for cfg in configs}
+    acc_result = await db.execute(select(Account).where(Account.id.in_(account_ids)))
+    accounts_by_id = {a.id: a for a in acc_result.scalars().all()}
 
     for cfg in configs:
         if not await _should_trigger(cfg):
@@ -65,6 +73,7 @@ async def check_balance_low(db: AsyncSession) -> None:
             config_id=cfg.id,
             account_id=cfg.account_id,
             alert_type=AlertType.balance_low,
+            severity=cfg.severity,
             triggered_value=balance,
             threshold_value=threshold,
             status=AlertEventStatus.pending,
@@ -74,8 +83,7 @@ async def check_balance_low(db: AsyncSession) -> None:
         db.add(event)
         await db.flush()
 
-        acc_result = await db.execute(select(Account).where(Account.id == cfg.account_id))
-        acc = acc_result.scalar_one_or_none()
+        acc = accounts_by_id.get(cfg.account_id)
         if acc is None:
             continue
 
@@ -86,7 +94,6 @@ async def check_balance_low(db: AsyncSession) -> None:
             except Exception:
                 logger.warning("Webhook URL 解密失败, config_id=%s", cfg.id)
 
-        admin_ids = await _get_admin_ids(db)
         await dispatch_alert_event(
             db, event, acc.name,
             cfg.webhook_type, webhook_url,
@@ -113,15 +120,26 @@ async def check_recharge_due(db: AsyncSession) -> None:
         )
     )
     configs = result.scalars().all()
+    if not configs:
+        return
 
     now = datetime.now(timezone.utc)
+    admin_ids = await _get_admin_ids(db)
+    account_ids = {cfg.account_id for cfg in configs}
+    acc_result = await db.execute(select(Account).where(Account.id.in_(account_ids)))
+    accounts_by_id = {a.id: a for a in acc_result.scalars().all()}
+
     for cfg in configs:
         if cfg.last_recharge_date is None or cfg.recharge_cycle_days is None:
             continue
         if not await _should_trigger(cfg):
             continue
 
-        days_since = (now - cfg.last_recharge_date).days
+        # 确保时区一致：naive datetime 视为 UTC
+        last_recharge = cfg.last_recharge_date
+        if last_recharge.tzinfo is None:
+            last_recharge = last_recharge.replace(tzinfo=timezone.utc)
+        days_since = (now - last_recharge).days
         if days_since < cfg.recharge_cycle_days:
             continue
 
@@ -129,6 +147,7 @@ async def check_recharge_due(db: AsyncSession) -> None:
             config_id=cfg.id,
             account_id=cfg.account_id,
             alert_type=AlertType.recharge_due,
+            severity=cfg.severity,
             triggered_value=None,
             threshold_value=None,
             status=AlertEventStatus.pending,
@@ -138,8 +157,7 @@ async def check_recharge_due(db: AsyncSession) -> None:
         db.add(event)
         await db.flush()
 
-        acc_result = await db.execute(select(Account).where(Account.id == cfg.account_id))
-        acc = acc_result.scalar_one_or_none()
+        acc = accounts_by_id.get(cfg.account_id)
         if acc is None:
             continue
 
@@ -150,7 +168,6 @@ async def check_recharge_due(db: AsyncSession) -> None:
             except Exception:
                 pass
 
-        admin_ids = await _get_admin_ids(db)
         await dispatch_alert_event(
             db, event, acc.name,
             cfg.webhook_type, webhook_url,

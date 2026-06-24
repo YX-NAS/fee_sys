@@ -116,9 +116,20 @@
       </el-tab-pane>
 
       <el-tab-pane label="告警" name="alerts">
+        <div class="toolbar">
+          <span class="hint">告警事件记录已合并到「提醒中心 → 告警记录」</span>
+          <el-button type="primary" @click="$router.push('/alerts')">前往提醒中心</el-button>
+        </div>
         <el-table :data="alertRules">
           <el-table-column label="账号"><template #default="{ row }">{{ accountName(row.provider_account_id) }}</template></el-table-column>
           <el-table-column label="类型"><template #default="{ row }">{{ alertTypeLabel(row.alert_type) }}</template></el-table-column>
+          <el-table-column label="级别" width="110"><template #default="{ row }">
+            <el-select v-model="row.severity" size="small" style="width:100%">
+              <el-option label="严重" value="critical" />
+              <el-option label="警告" value="warning" />
+              <el-option label="信息" value="info" />
+            </el-select>
+          </template></el-table-column>
           <el-table-column label="余额阈值" width="150"><template #default="{ row }">
             <el-input v-if="row.alert_type === 'balance_low'" v-model="row.threshold_amount" placeholder="阈值金额" />
             <span v-else>-</span>
@@ -135,13 +146,6 @@
           <el-table-column label="操作" width="80"><template #default="{ row }">
             <el-button link type="primary" @click="saveAlert(row)">保存</el-button>
           </template></el-table-column>
-        </el-table>
-        <h3 class="subhead">最近告警</h3>
-        <el-table :data="alertEvents">
-          <el-table-column prop="created_at" label="时间"><template #default="{ row }">{{ formatTime(row.created_at) }}</template></el-table-column>
-          <el-table-column prop="message" label="内容" min-width="360" />
-          <el-table-column prop="status" label="状态" width="110" />
-          <el-table-column label="操作" width="100"><template #default="{ row }"><el-button v-if="row.status === 'open'" link @click="ackAlert(row)">确认</el-button></template></el-table-column>
         </el-table>
       </el-tab-pane>
 
@@ -278,7 +282,6 @@ const prices = ref<AIPrice[]>([])
 const keys = ref<AIGatewayKey[]>([])
 const syncRuns = ref<any[]>([])
 const alertRules = ref<any[]>([])
-const alertEvents = ref<any[]>([])
 const usageRange = ref<[string, string]>([dayjs().subtract(13, 'day').format('YYYY-MM-DD'), dayjs().format('YYYY-MM-DD')])
 const usageAccount = ref('')
 const keyAccount = ref('')
@@ -341,7 +344,7 @@ async function loadUsage() {
 }
 async function loadPrices() { prices.value = await aiApi.prices() }
 async function loadSyncRuns() { syncRuns.value = await aiApi.syncRuns() }
-async function loadAlerts() { const data: any = await aiApi.alerts(); alertRules.value = data.rules; alertEvents.value = data.events }
+async function loadAlerts() { const data: any = await aiApi.alerts(); alertRules.value = data.rules }
 async function loadKeys() { keys.value = keyAccount.value ? await aiApi.keys(keyAccount.value) : [] }
 
 function openAccount(item?: AIAccount) {
@@ -449,7 +452,6 @@ async function createKey() {
 async function copySecret() { await navigator.clipboard.writeText(createdSecret.value); ElMessage.success('已复制') }
 async function disableKey(item: AIGatewayKey) { await aiApi.disableKey(item.id); await loadKeys() }
 async function saveAlert(row: any) { await aiApi.updateAlert(row.provider_account_id, row.alert_type, { ...row, webhook_url: null }); ElMessage.success('告警规则已更新') }
-async function ackAlert(row: any) { await aiApi.acknowledgeAlert(row.id); await loadAlerts() }
 async function createPrice() {
   await aiApi.createPrice({ ...priceForm.value, currency: 'CNY', effective_to: null })
   priceDialog.value = false
@@ -493,6 +495,7 @@ onBeforeUnmount(() => {
 .base-url { color: #606266; font-size: 12px; overflow-wrap: anywhere; }
 .credential-tag { margin-left: 6px; }
 .subhead { margin: 24px 0 10px; font-size: 15px; }
+.hint { color: #909399; font-size: 13px; }
 .secret-input { margin-top: 16px; }
 @media (max-width: 768px) {
   .page { padding: 10px; }

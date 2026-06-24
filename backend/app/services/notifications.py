@@ -7,23 +7,30 @@ import httpx
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import AlertEvent, AlertType, ChannelStatus, Notification, User
+from app.models import AlertEvent, AlertSeverity, AlertType, ChannelStatus, Notification, User
 
 logger = logging.getLogger(__name__)
 
 MAX_RETRY = 3
 
+_SEVERITY_PREFIX = {
+    AlertSeverity.critical: "🔴",
+    AlertSeverity.warning: "🟡",
+    AlertSeverity.info: "🔵",
+}
+
 
 def _build_alert_message(event: AlertEvent, account_name: str) -> tuple[str, str]:
     """返回 (title, content)"""
+    prefix = _SEVERITY_PREFIX.get(getattr(event, "severity", None), "")
     if event.alert_type == AlertType.balance_low:
-        title = f"⚠️ 余额不足提醒 - {account_name}"
+        title = f"{prefix} 余额不足提醒 - {account_name}"
         content = (
             f"账号【{account_name}】当前余额 {event.triggered_value} 已低于阈值 {event.threshold_value}，"
             f"请及时充值以避免服务中断。"
         )
     else:
-        title = f"🔔 充值周期提醒 - {account_name}"
+        title = f"{prefix} 充值周期提醒 - {account_name}"
         content = f"账号【{account_name}】的充值周期已到，请检查是否需要充值续费。"
     return title, content
 

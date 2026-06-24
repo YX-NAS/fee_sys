@@ -1,7 +1,7 @@
 import http from './http'
 import type {
   AIAccount, AIDailyUsage, AIGatewayKey, AIOverview, AIPrice,
-  AIProviderAPICredential,
+  AIProviderAPICredential, AIAlertRuleOut, AIAlertEventOut,
 } from '@/types'
 
 export const aiApi = {
@@ -33,7 +33,7 @@ export const aiApi = {
   disableKey: (id: string) => http.post(`/api/ai/gateway-keys/${id}/disable`),
   prices: () => http.get<unknown, AIPrice[]>('/api/ai/prices'),
   createPrice: (data: Record<string, unknown>) => http.post<unknown, AIPrice>('/api/ai/prices', data),
-  alerts: () => http.get<unknown, { rules: any[]; events: any[] }>('/api/ai/alerts'),
+  alerts: () => http.get<unknown, { rules: AIAlertRuleOut[]; events: AIAlertEventOut[] }>('/api/ai/alerts'),
   updateAlert: (accountId: string, type: string, data: Record<string, unknown>) =>
     http.put(`/api/ai/accounts/${accountId}/alerts/${type}`, data),
   acknowledgeAlert: (id: string) => http.post(`/api/ai/alerts/${id}/acknowledge`),

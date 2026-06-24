@@ -30,9 +30,12 @@ async def _run_recharge_check() -> None:
 async def _run_retry_failed() -> None:
     from app.database import AsyncSessionLocal
     from app.services.notifications import retry_failed_events
+    from app.services.ai.monitoring import retry_failed_ai_alerts
     logger.info("[Scheduler] 重试失败提醒事件...")
     async with AsyncSessionLocal() as db:
         await retry_failed_events(db)
+    async with AsyncSessionLocal() as db:
+        await retry_failed_ai_alerts(db)
     logger.info("[Scheduler] 重试完成")
 
 

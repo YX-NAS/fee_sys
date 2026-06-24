@@ -2,6 +2,48 @@
   <div class="page">
     <h2 class="page-title">概览</h2>
 
+    <!-- 告警摘要卡片 -->
+    <el-card v-if="alertSummary" shadow="never" class="alert-summary-card" :class="{ 'has-critical': alertSummary.by_severity.critical > 0 }">
+      <div class="alert-summary-head">
+        <div class="alert-summary-title">
+          <el-badge :value="alertSummary.total_unresolved || undefined" :max="99" type="danger">
+            <span class="alert-icon">告警摘要</span>
+          </el-badge>
+        </div>
+        <el-button link type="primary" @click="$router.push('/alerts')">查看全部</el-button>
+      </div>
+      <el-row :gutter="12" class="alert-stats">
+        <el-col :span="8">
+          <div class="alert-stat critical">
+            <div class="alert-stat-num">{{ alertSummary.by_severity.critical || 0 }}</div>
+            <div class="alert-stat-label">严重</div>
+          </div>
+        </el-col>
+        <el-col :span="8">
+          <div class="alert-stat warning">
+            <div class="alert-stat-num">{{ alertSummary.by_severity.warning || 0 }}</div>
+            <div class="alert-stat-label">警告</div>
+          </div>
+        </el-col>
+        <el-col :span="8">
+          <div class="alert-stat info">
+            <div class="alert-stat-num">{{ alertSummary.by_severity.info || 0 }}</div>
+            <div class="alert-stat-label">信息</div>
+          </div>
+        </el-col>
+      </el-row>
+      <div v-if="alertSummary.recent.length" class="alert-recent">
+        <div v-for="r in alertSummary.recent.slice(0, 5)" :key="r.id" class="alert-recent-item" @click="$router.push('/alerts')">
+          <el-tag :type="severityTagType(r.severity)" size="small" effect="dark">{{ severityLabel(r.severity) }}</el-tag>
+          <el-tag size="small" :type="r.source === 'ai' ? 'primary' : 'info'">{{ r.source === 'ai' ? 'AI' : '费用' }}</el-tag>
+          <span class="alert-recent-account">{{ r.account_name }}</span>
+          <span class="alert-recent-msg">{{ r.message || alertTypeLabel(r.alert_type) }}</span>
+          <span class="alert-recent-time">{{ dayjs(r.created_at).format('MM-DD HH:mm') }}</span>
+        </div>
+      </div>
+      <div v-else class="alert-empty">暂无未处理告警</div>
+    </el-card>
+
     <!-- 账号选择 -->
     <el-row :gutter="16" class="mb-16">
       <el-col :span="8">
@@ -69,17 +111,19 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import dayjs from 'dayjs'
 import { accountApi } from '@/api/accounts'
 import { transactionApi } from '@/api/transactions'
 import { analyticsApi } from '@/api/analytics'
-import type { AccountOut, AnalyticsSummary, TransactionOut } from '@/types'
+import { alertApi } from '@/api/alerts'
+import type { AccountOut, AnalyticsSummary, TransactionOut, AlertSummary } from '@/types'
 
 const accounts = ref<AccountOut[]>([])
 const selectedAccountId = ref<string>('')
 const summary = ref<AnalyticsSummary | null>(null)
 const recentTxns = ref<TransactionOut[]>([])
+const alertSummary = ref<AlertSummary | null>(null)
 
 const momClass = computed(() => {
   if (!summary.value || summary.value.mom_change_rate === null) return ''
@@ -102,11 +146,21 @@ function txnTagType(t: string) {
 function txnLabel(t: string) {
   return { recharge: '充值', consume: '消费', adjustment: '调整', refund: '退款' }[t] || t
 }
+function severityTagType(s: string) { return { critical: 'danger', warning: 'warning', info: 'info' }[s] || 'info' }
+function severityLabel(s: string) { return { critical: '严重', warning: '警告', info: '信息' }[s] || s }
+function alertTypeLabel(t: string) {
+  const m: Record<string, string> = { balance_low: '余额不足', recharge_due: '充值周期', sync_failed: '同步失败', cost_spike: '费用突增', no_usage: '无用量数据' }
+  return m[t] || t
+}
 
+let alertTimer: ReturnType<typeof setInterval> | null = null
 onMounted(async () => {
   const res = await accountApi.list({ page: 1, page_size: 100, status: 'active' })
   accounts.value = res.items
+  try { alertSummary.value = await alertApi.summary() } catch { /* ignore */ }
+  alertTimer = setInterval(async () => { try { alertSummary.value = await alertApi.summary() } catch { /* ignore */ } }, 60000)
 })
+onBeforeUnmount(() => { if (alertTimer) clearInterval(alertTimer) })
 </script>
 
 <style scoped>
@@ -118,4 +172,25 @@ onMounted(async () => {
 .stat-value { font-size: 24px; font-weight: bold; color: #303133; }
 .consume { color: #f56c6c; }
 .recharge { color: #67c23a; }
+.alert-summary-card { margin-bottom: 16px; }
+.alert-summary-card.has-critical { border-left: 3px solid #f56c6c; }
+.alert-summary-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.alert-summary-title { font-size: 15px; font-weight: 600; }
+.alert-icon { padding-right: 12px; }
+.alert-stats { margin-bottom: 12px; }
+.alert-stat { text-align: center; padding: 8px 0; border-radius: 4px; }
+.alert-stat.critical { background: #fef0f0; }
+.alert-stat.warning { background: #fdf6ec; }
+.alert-stat.info { background: #f4f4f5; }
+.alert-stat-num { font-size: 22px; font-weight: bold; }
+.alert-stat.critical .alert-stat-num { color: #f56c6c; }
+.alert-stat.warning .alert-stat-num { color: #e6a23c; }
+.alert-stat.info .alert-stat-num { color: #909399; }
+.alert-stat-label { font-size: 12px; color: #909399; }
+.alert-recent-item { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid #f5f5f5; cursor: pointer; }
+.alert-recent-item:hover { background: #f9f9f9; }
+.alert-recent-account { font-size: 13px; color: #303133; white-space: nowrap; }
+.alert-recent-msg { font-size: 12px; color: #606266; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.alert-recent-time { font-size: 12px; color: #c0c4cc; white-space: nowrap; }
+.alert-empty { text-align: center; color: #909399; padding: 16px 0; }
 </style>
